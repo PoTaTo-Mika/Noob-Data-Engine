@@ -1,0 +1,7 @@
+{
+    "model_checkpoints_path": "../../",
+    "distill_lora_path": "../",
+    "reference_dataset_path": "../../",
+    "converted_dataset_path": "../../",
+    "generate_prompt": "this will be a string for system prompt."
+}

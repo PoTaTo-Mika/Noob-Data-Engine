@@ -1,0 +1,8 @@
+{
+    "task_name": "sketch-001",
+    "model_checkpoints_path": "../../checkpoints/Qwen-Image-Edit-2511",
+    "distill_lora_path": "../../checkpoints/Qwen-Image-Edit-2511-4-Steps-Distill-Lora",
+    "converted_dataset_path": "../../data/style_transfer/raw/converted_data",
+    "save_path": "../../data/style_transfer/sketch",
+    "generate_prompt": "wait for maomaotou's prompt"
+}

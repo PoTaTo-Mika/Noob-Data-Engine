@@ -1,0 +1,2 @@
+modelscope download --model qwen/Qwen-Image-Edit-2511 --local_dir ./checkpoints/Qwen-Image-Edit-2511
+modelscope download --model lightx2v/Qwen-Image-Edit-2511-Lightning Qwen-Image-Edit-2511-Lightning-4steps-V1.0-fp32.safetensors --local_dir ./checkpoints/Qwen-Image-Edit-2511-4-Steps-Distill-Lora
