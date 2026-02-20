@@ -5,55 +5,135 @@ import webdataset as wds
 import json
 import time
 
+import sys
+from pathlib import Path
+
+# 自动定位项目根目录并加入 sys.path
+current_file_path = Path(__file__).resolve()
+project_root = current_file_path.parents[2]
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+
 from utils.data_io.read_tar import read_sample_from_tar
 
 # setup config
-with open("./configs/generate_config.json", "r") as f:
+config_path = current_file_path.parent / "configs" / "sketch.json"
+with open(config_path, "r", encoding="utf-8") as f:
     config = json.load(f)
 
-MODEL_CHECKPOINTS_PATH = config["model_checkpoints_path"]
-LORA_PATH = config["distill_lora_path"]
-CONVERTED_DATASET_PATH = config["converted_dataset_path"]
-SAVE_PATH = config["save_path"] + config['task_name'] + "/"
+def get_abs_path(p):
+    # 处理配置文件中的相对路径，使其相对于项目根目录
+    if p.startswith("../../"):
+        return str(project_root / p.replace("../../", ""))
+    return p
+
+MODEL_CHECKPOINTS_PATH = get_abs_path(config["model_checkpoints_path"])
+LORA_PATH = get_abs_path(config["distill_lora_path"])
+CONVERTED_DATASET_PATH = get_abs_path(config["converted_dataset_path"])
+SAVE_PATH = os.path.join(get_abs_path(config["save_path"]), config['task_name']) + "/"
 PROMPT = config['generate_prompt']
+IF_RESIZE = config['if_resize']
 
 import diffsynth
-from diffsynth.pipelines.qwen_image import QwenImagePipeline, ModelConfig
-from modelscope import dataset_snapshot_download
+from diffsynth.pipelines.qwen_image import QwenImagePipeline, ModelConfig, FlowMatchScheduler
 from PIL import Image
 import torch
 
-pipe = QwenImagePipeline.from_pretrained(
-    torch_dtype=torch.bfloat16,
-    device="cuda",
-    model_configs=[
-        ModelConfig(model_id=MODEL_CHECKPOINTS_PATH, origin_file_pattern="transformer/diffusion_pytorch_model*.safetensors"),
-        ModelConfig(model_id=MODEL_CHECKPOINTS_PATH, origin_file_pattern="text_encoder/model*.safetensors"),
-        ModelConfig(model_id=MODEL_CHECKPOINTS_PATH, origin_file_pattern="vae/diffusion_pytorch_model.safetensors"),
-    ],
-    processor_config=ModelConfig(model_id="Qwen/Qwen-Image-Edit", origin_file_pattern="processor/"),
-)
+# VRAM 检测阈值（单位：GB），低于此值启用低显存低精度卸载方案
+LOW_VRAM_THRESHOLD_GB = 48
 
-lora = ModelConfig(
-    model_id=LORA_PATH,
-    origin_file_pattern="Qwen-Image-Edit-2511-Lightning-4steps-V1.0-fp32.safetensors"
-)
+def get_vram_gb() -> float:
+    if not torch.cuda.is_available():
+        return 0.0
+    total_bytes = torch.cuda.get_device_properties(0).total_memory
+    return total_bytes / (1024 ** 3)
 
-pipe.load_lora(pipe.dit, lora, alpha=8/64)
-pipe.scheduler = FlowMatchScheduler("Qwen-Image-Lightning")
+def build_pipeline() -> QwenImagePipeline:
+    vram_gb = get_vram_gb()
+    print(f"[Pipeline] Detected VRAM: {vram_gb:.1f} GB (threshold: {LOW_VRAM_THRESHOLD_GB} GB)")
 
-def get_data(folder):
+    if vram_gb < LOW_VRAM_THRESHOLD_GB:
+        # https://github.com/modelscope/DiffSynth-Studio/blob/main/examples/qwen_image/model_inference_low_vram/Qwen-Image-Edit-2511-Lightning.py
+        print("[Pipeline] Using LOW VRAM mode (FP8 + disk offload)")
+        vram_config = {
+            "offload_dtype": "disk",
+            "offload_device": "disk",
+            "onload_dtype": torch.float8_e4m3fn,
+            "onload_device": "cpu",
+            "preparing_dtype": torch.float8_e4m3fn,
+            "preparing_device": "cuda",
+            "computation_dtype": torch.bfloat16,
+            "computation_device": "cuda",
+        }
+    else:
+        print("[Pipeline] Using FULL VRAM mode (BF16)")
+        vram_config = {}
+
+    pipeline = QwenImagePipeline.from_pretrained(
+        torch_dtype=torch.bfloat16,
+        device="cuda",
+        model_configs=[
+            ModelConfig(
+                model_id="Qwen/Qwen-Image-Edit-2511",
+                local_model_path=MODEL_CHECKPOINTS_PATH,
+                origin_file_pattern="transformer/diffusion_pytorch_model*.safetensors",
+                skip_download=True,
+                **vram_config
+            ),
+            ModelConfig(
+                model_id="Qwen/Qwen-Image-Edit-2511",
+                local_model_path=MODEL_CHECKPOINTS_PATH,
+                origin_file_pattern="text_encoder/model*.safetensors",
+                skip_download=True,
+                **vram_config
+            ),
+            ModelConfig(
+                model_id="Qwen/Qwen-Image-Edit-2511",
+                local_model_path=MODEL_CHECKPOINTS_PATH,
+                origin_file_pattern="vae/diffusion_pytorch_model.safetensors",
+                skip_download=True,
+                **vram_config
+            ),
+        ],
+        processor_config=ModelConfig(
+            model_id="Qwen/Qwen-Image-Edit-2511",
+            local_model_path=MODEL_CHECKPOINTS_PATH,
+            origin_file_pattern="processor/",
+            skip_download=True,
+        ),
+    )
+
+    lora = ModelConfig(
+        model_id="lightx2v/Qwen-Image-Edit-2511-Lightning",
+        local_model_path=LORA_PATH,
+        origin_file_pattern="Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors",
+        skip_download=True,
+    )
+    pipeline.load_lora(pipeline.dit, lora, alpha=8/64)
+    pipeline.scheduler = FlowMatchScheduler("Qwen-Image-Lightning")
+
+    return pipeline
+
+pipe = build_pipeline()
+
+def get_data(folder, resize):
     # 查找目录下所有的 tar 文件
     # 因为我们做线稿的话是只需要它原本的pid的
     tar_files = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".tar")]
     # 使用 read_sample_from_tar 迭代读取
     for metadata, picture in read_sample_from_tar(tar_files):
         pid = metadata.get("pid")
+        if resize:
+            img = Image.open(picture).convert("RGB")
+            picture = img.resize((1024, 1024), Image.LANCZOS)
         yield pid, picture
 
 def process_one_picture(pipe, pid, picture):
     # 提取线稿只需要一张图+prompt即可
-    img = Image.open(picture)
+    if isinstance(picture, Image.Image):
+        img = picture
+    else:
+        img = Image.open(picture)
     width, height = img.size
     edit_image = [img]
     prompt = PROMPT
@@ -88,7 +168,7 @@ def main():
     with open(jsonl_path, 'w', encoding='utf-8') as f_json:
         
         # 4. 遍历数据 (get_data 内部调用了 read_sample_from_tar)
-        for pid, picture_stream in get_data(CONVERTED_DATASET_PATH):
+        for pid, picture_stream in get_data(CONVERTED_DATASET_PATH, resize=IF_RESIZE):
             try:
                 # 记录开始时间
                 t0 = time.time()
@@ -139,3 +219,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -1,8 +1,9 @@
 {
     "task_name": "sketch-001",
-    "model_checkpoints_path": "../../checkpoints/Qwen-Image-Edit-2511",
-    "distill_lora_path": "../../checkpoints/Qwen-Image-Edit-2511-4-Steps-Distill-Lora",
+    "model_checkpoints_path": "../../checkpoints",
+    "distill_lora_path": "../../checkpoints",
     "converted_dataset_path": "../../data/style_transfer/raw/converted_data",
     "save_path": "../../data/style_transfer/sketch",
-    "generate_prompt": "wait for maomaotou's prompt"
+    "if_resize": "True",
+    "generate_prompt": "Transform this image into a professional B&W line drawing. Only black outlines on a pure white background, no shading or colors."
 }
