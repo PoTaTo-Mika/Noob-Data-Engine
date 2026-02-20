@@ -1,6 +1,6 @@
 webdataset
 torch==2.9.0
-torchvision==2.9.0
+torchvision
 transformers==4.57.3
 diffusers
 modelscope

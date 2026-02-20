@@ -42,6 +42,34 @@ import torch
 # VRAM 检测阈值（单位：GB），低于此值启用低显存低精度卸载方案
 LOW_VRAM_THRESHOLD_GB = 48
 
+def setup_attention_kernel():
+    from diffsynth.core.attention.attention import attention_forward, ATTENTION_IMPLEMENTATION
+    from einops import rearrange
+    import diffsynth.models.qwen_image_dit as qwen_image_dit
+
+    def apply_flash_attn(q, k, v, num_heads, attention_mask=None, enable_fp8_attention=False, **kwargs):
+        # q, k, v: [batch, heads, seq_len, head_dim] (b n s d)
+        x = attention_forward(
+            q, k, v,
+            q_pattern="b n s d",
+            k_pattern="b n s d",
+            v_pattern="b n s d",
+            out_pattern="b s n d",
+            attn_mask=attention_mask 
+        )
+        # x: [batch, seq_len, heads, head_dim] (b s n d)
+        return rearrange(x, "b s n d -> b s (n d)")
+
+    # 替换注意力内核
+    qwen_image_dit.qwen_image_flash_attention = apply_flash_attn
+
+    if "flash_attention" in ATTENTION_IMPLEMENTATION:
+        print("[Attention Kernel] Applied Flash Attention.")
+    else:
+        print("[Attention Kernel] Applied original SDPA Kernel.")
+
+setup_attention_kernel()
+
 def get_vram_gb() -> float:
     if not torch.cuda.is_available():
         return 0.0
@@ -101,6 +129,7 @@ def build_pipeline() -> QwenImagePipeline:
             origin_file_pattern="processor/",
             skip_download=True,
         ),
+        vram_limit=get_vram_gb()-0.5 if vram_gb < LOW_VRAM_THRESHOLD_GB else LOW_VRAM_THRESHOLD_GB,
     )
 
     lora = ModelConfig(
