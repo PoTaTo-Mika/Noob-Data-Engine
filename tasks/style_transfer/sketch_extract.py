@@ -46,6 +46,7 @@ def setup_attention_kernel():
     from diffsynth.core.attention.attention import attention_forward, ATTENTION_IMPLEMENTATION
     from einops import rearrange
     import diffsynth.models.qwen_image_dit as qwen_image_dit
+    import diffsynth.models.qwen_image_text_encoder as text_encoder
 
     def apply_flash_attn(q, k, v, num_heads, attention_mask=None, enable_fp8_attention=False, **kwargs):
         # q, k, v: [batch, heads, seq_len, head_dim] (b n s d)
@@ -64,11 +65,29 @@ def setup_attention_kernel():
     qwen_image_dit.qwen_image_flash_attention = apply_flash_attn
 
     if "flash_attention" in ATTENTION_IMPLEMENTATION:
-        print("[Attention Kernel] Applied Flash Attention.")
+        print("[Attention Kernel] Applied Flash Attention to DiT.")
     else:
-        print("[Attention Kernel] Applied original SDPA Kernel.")
+        print("[Attention Kernel] Applied original SDPA Kernel to DiT.")
 
-setup_attention_kernel()
+""" 
+    # 因为bf16的问题还没搞定,暂且注释这个加速
+    # 替换qwen-vl注意力内核
+    from transformers import Qwen2_5_VLConfig
+    text_encoder_init = text_encoder.QwenImageTextEncoder.__init__
+    config_init = Qwen2_5_VLConfig.__init__
+    
+    def vlm_attn_init(self, *args, **kwargs):
+        kwargs["attn_implementation"] = "flash_attention_2"
+        kwargs["dtype"] = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        config_init(self, *args, **kwargs)
+    
+    Qwen2_5_VLConfig.__init__ = vlm_attn_init
+    
+    if "flash_attention" in ATTENTION_IMPLEMENTATION:
+        print("[Attention Kernel] Applied Flash Attention to VLM.")
+    else:
+        print("[Attention Kernel] Applied original SDPA Kernel to VLM.")
+"""
 
 def get_vram_gb() -> float:
     if not torch.cuda.is_available():
@@ -143,8 +162,6 @@ def build_pipeline() -> QwenImagePipeline:
 
     return pipeline
 
-pipe = build_pipeline()
-
 def get_data(folder, resize):
     # 查找目录下所有的 tar 文件
     # 因为我们做线稿的话是只需要它原本的pid的
@@ -183,6 +200,9 @@ def process_one_picture(pipe, pid, picture):
 
 def main():
 
+    setup_attention_kernel()
+    pipe = build_pipeline()
+    
     if not os.path.exists(SAVE_PATH):
         os.makedirs(SAVE_PATH, exist_ok=True)
         print(f"Created directory: {SAVE_PATH}")

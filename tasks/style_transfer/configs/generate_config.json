@@ -1,7 +1,10 @@
 {
-    "model_checkpoints_path": "../../",
-    "distill_lora_path": "../",
-    "reference_dataset_path": "../../",
-    "converted_dataset_path": "../../",
-    "generate_prompt": "this will be a string for system prompt."
+    "task_name": "sketch-001-paint",
+    "model_checkpoints_path": "../../checkpoints",
+    "distill_lora_path": "../../checkpoints",
+    "sketch_data_path": "../../data/style_transfer/",
+    "ref_data_path": "../../data/style_transfer/reference",
+    "save_path": "../../data/style_transfer/results",
+    "if_resize": "True",
+    "generate_prompt": "Placeholder"
 }
