@@ -1,2 +1,2 @@
-modelscope download --model qwen/Qwen-Image-Edit-2511 --local_dir ./checkpoints/Qwen/Qwen-Image-Edit-2511
-modelscope download --model lightx2v/Qwen-Image-Edit-2511-Lightning Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors --local_dir ./checkpoints/lightx2v/Qwen-Image-Edit-2511-Lightning
+hf download qwen/Qwen-Image-Edit-2511 --local-dir ./checkpoints/Qwen/Qwen-Image-Edit-2511
+hf download lightx2v/Qwen-Image-Edit-2511-Lightning --include "Qwen-Image-Edit-2511-Lightning-4steps-V1.0-bf16.safetensors" --local-dir ./checkpoints/lightx2v/Qwen-Image-Edit-2511-Lightning

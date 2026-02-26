@@ -169,10 +169,11 @@ def get_data(folder, resize):
     # 使用 read_sample_from_tar 迭代读取
     for metadata, picture in read_sample_from_tar(tar_files):
         pid = metadata.get("pid")
+        artist = metadata.get("artist")
         if resize:
             img = Image.open(picture).convert("RGB")
             picture = img.resize((1024, 1024), Image.LANCZOS)
-        yield pid, picture
+        yield pid, artist, picture
 
 def process_one_picture(pipe, pid, picture):
     # 提取线稿只需要一张图+prompt即可
@@ -217,7 +218,7 @@ def main():
     with open(jsonl_path, 'w', encoding='utf-8') as f_json:
         
         # 4. 遍历数据 (get_data 内部调用了 read_sample_from_tar)
-        for pid, picture_stream in get_data(CONVERTED_DATASET_PATH, resize=IF_RESIZE):
+        for pid, artist, picture_stream in get_data(CONVERTED_DATASET_PATH, resize=IF_RESIZE):
             try:
                 # 记录开始时间
                 t0 = time.time()
@@ -242,6 +243,7 @@ def main():
                 meta_data = {
                     "file_name": file_name_no_ext, 
                     "task": "style_transfer",
+                    "reference_artist": artist,
                     "converted_pid": pid
                 }
                 
