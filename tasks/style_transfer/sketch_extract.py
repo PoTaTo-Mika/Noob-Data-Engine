@@ -40,7 +40,7 @@ IF_RESIZE = config['if_resize']
 NUM_GPUS = config.get("num_gpus", torch.cuda.device_count())
 
 # VRAM 检测阈值（单位：GB）
-LOW_VRAM_THRESHOLD_GB = 48
+LOW_VRAM_THRESHOLD_GB = 120 # H200
 
 # --------------------------------------------------------------------------
 # Pipeline构建与模型相关函数 (这些函数将在子进程中运行)
@@ -152,9 +152,11 @@ def get_data_generator(tar_files_shard, resize):
     for metadata, picture in read_sample_from_tar(tar_files_shard):
         pid = metadata.get("pid")
         artist = metadata.get("artist")
-        if resize:
-            img = Image.open(picture).convert("RGB")
-            picture = img.resize((1024, 1024), Image.LANCZOS)
+        # resize the image
+        width, height = picture.size
+        width = round(width / 32) * 32
+        height = round(width / 32) * 32
+        picture = picture.resize((new_width, new_height), Image.LANCZOS)
         yield pid, artist, picture
 
 def process_one_picture(pipe, pid, picture):
@@ -163,6 +165,7 @@ def process_one_picture(pipe, pid, picture):
     else:
         img = Image.open(picture)
     width, height = img.size
+    
     edit_image = [img]
     prompt = PROMPT
 

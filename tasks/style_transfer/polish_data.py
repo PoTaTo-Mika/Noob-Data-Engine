@@ -52,7 +52,7 @@ def process_dataset(directory):
     for index, item in enumerate(data_list, 1):
         old_filename_base = item['file_name']
         old_path = os.path.join(directory, old_filename_base + ".png")  
-        # 生成新名字：sk_sketch_000000001 (9位数字，不够补0)
+        # 生成新名字：st_sketch_000000001 (9位数字，不够补0)
         new_filename_base = f"{NEW_PREFIX}{index:09d}"
         new_path = os.path.join(directory, new_filename_base + ".png")
         

@@ -4,6 +4,6 @@
     "distill_lora_path": "../../checkpoints",
     "converted_dataset_path": "../../data/style_transfer/raw/converted_data",
     "save_path": "../../data/style_transfer/sketch",
-    "if_resize": "True",
+    "if_resize": "False",
     "generate_prompt": "Transform this image into a professional B&W line drawing. Only black outlines on a pure white background, no shading or colors."
 }
