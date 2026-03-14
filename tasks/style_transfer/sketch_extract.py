@@ -40,7 +40,7 @@ IF_RESIZE = config['if_resize']
 NUM_GPUS = config.get("num_gpus", torch.cuda.device_count())
 
 # VRAM 检测阈值（单位：GB）
-LOW_VRAM_THRESHOLD_GB = 120 # H200
+LOW_VRAM_THRESHOLD_GB = 120
 
 # --------------------------------------------------------------------------
 # Pipeline构建与模型相关函数 (这些函数将在子进程中运行)
@@ -152,11 +152,6 @@ def get_data_generator(tar_files_shard, resize):
     for metadata, picture in read_sample_from_tar(tar_files_shard):
         pid = metadata.get("pid")
         artist = metadata.get("artist")
-        # resize the image
-        width, height = picture.size
-        width = round(width / 32) * 32
-        height = round(width / 32) * 32
-        picture = picture.resize((new_width, new_height), Image.LANCZOS)
         yield pid, artist, picture
 
 def process_one_picture(pipe, pid, picture):
@@ -164,7 +159,11 @@ def process_one_picture(pipe, pid, picture):
         img = picture
     else:
         img = Image.open(picture)
+    
     width, height = img.size
+    width = round(width / 32) * 32
+    height = round(height / 32) * 32
+    img = img.resize((width, height))
     
     edit_image = [img]
     prompt = PROMPT
@@ -176,10 +175,11 @@ def process_one_picture(pipe, pid, picture):
         num_inference_steps=4,
         height=height,
         width=width,
-        edit_image_auto_resize=True,
+        edit_image_auto_resize=False,
         zero_cond_t=True,
         cfg_scale=1.0,
     )
+
     return image, pid
 
 # --------------------------------------------------------------------------
@@ -224,7 +224,7 @@ def gpu_worker(gpu_id, tar_files_shard):
                      final_image = generated_result
 
                 # 引入了多个GPU之后就要注意防止冲突了。
-                file_name_no_ext = f"st_sketch_g{gpu_id}_{count:09d}"
+                file_name_no_ext = f"st_lineart_g{gpu_id}_{count:09d}"
                 image_filename = f"{file_name_no_ext}.png"
                 save_image_path = os.path.join(SAVE_PATH, image_filename)
 
